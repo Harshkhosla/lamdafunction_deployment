@@ -3,7 +3,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.handler = void 0;
 const express_1 = __importDefault(require("express"));
+const aws_serverless_express_1 = __importDefault(require("aws-serverless-express"));
 const app = (0, express_1.default)();
 const PORT = 8080;
 app.use(express_1.default.json());
@@ -331,122 +333,91 @@ const apiResponse = [
         ]
     }
 ];
-app.get('/', (req, res) => {
-    const groupedEvents = apiResponse.reduce((acc, event) => {
-        console.log(acc);
-        // console.log(event);
-        const startDate = new Date(event.startDateTime);
-        const month = startDate.toLocaleString('default', { month: 'long' });
-        const year = startDate.getFullYear();
-        const key = `${month} ${year}`;
-        // @ts-ignore
-        if (!acc[key])
-            acc[key] = [];
-        // @ts-ignore
-        acc[key].push({
-            datetimePrimaryLine: startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            datetimeSecondaryLine: startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }),
-            description: `Building ID: ${event.buildingId}`,
-            title: formatGuestNames(event.guests.map(guest => guest.name)),
-            // title: event.guests.map(guest => guest.name).join(', '),
-        });
-        return acc;
-    }, {});
-    // }, {"dkvjsd":[]});
-    // console.log(groupedEvents);
-    function formatGuestNames(names) {
-        if (names.length <= 3) {
-            return names.join(', ');
-        }
-        const displayedNames = names.slice(0, 2).join(', ');
-        const remainingCount = names.length - 2;
-        return `${displayedNames} +${remainingCount}`;
-    }
-    const sections = Object.keys(groupedEvents).map(monthYear => ({
-        elementType: "eventList",
-        datetimeMargin: "tight",
-        heading: monthYear,
-        headingFontSize: "1rem",
-        headingLevel: 3,
-        headingMarginBottom: "xtight",
-        headingMarginTop: "none",
-        listStyle: "separated",
-        marginBottom: "loose",
-        marginTop: "none",
-        noItemsMessage: groupedEvents[monthYear].length === 0,
-        shadow: "medium",
-        shadowOpacity: 0.1,
-        showBottomBorder: false,
-        showTopBorder: false,
-        textblockMargin: "tight",
-        items: groupedEvents[monthYear].map(event => ({
-            accessoryButton: {
-                elementType: "dropdown",
-                accessoryIcon: "more",
-                showDisclosureIcon: false,
-                toggleActionStyle: "normal",
-                toggleBorderColor: "transparent",
-                toggleSize: "small",
-                items: [
-                    {
-                        confirmationMessage: "Are you sure you want to cancel this room booking? This cannot be undone.",
-                        title: "Cancel registration",
-                    },
-                    {
-                        title: "Edit registration",
-                        url: {
-                            relativePath: "./registration_edit_single.json",
-                            linkType: "relativePath",
-                        },
-                    },
-                ],
-            },
-            datetimePrimaryLine: event.datetimePrimaryLine,
-            datetimeSecondaryLine: event.datetimeSecondaryLine,
-            description: event.description,
-            dividerColor: "theme:focal_link_color",
-            title: event.title,
-        })),
-    }));
-    let xmljson = {
-        "metadata": {
-            "version": "2.0",
-            "pageTitle": "Register a Guest"
-        },
-        "contentStyle": "inherit",
-        "sections": [
-            {
-                "elementType": "responsiveColumn",
-                "marginBottom": "responsive",
-                "marginTop": "responsive",
-                "column": {
-                    "content": [
+const generateDynamicCalendarRows = (month, year) => {
+    const daysInWeek = 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const rows = [];
+    let currentDay = 1 - firstDayOfMonth;
+    while (currentDay <= daysInMonth) {
+        const week = { cells: [] };
+        for (let i = 0; i < daysInWeek; i++) {
+            if (currentDay > 0 && currentDay <= daysInMonth) {
+                const date = new Date(year, month, currentDay);
+                // @ts-ignore
+                week.cells.push({
+                    buttons: [
                         {
-                            "elementType": "tabs",
-                            "contentPaddingTop": "loose",
-                            "tabs": [
+                            elementType: "linkButton",
+                            actionStyle: "link",
+                            borderRadius: "full",
+                            disabled: false,
+                            id: `button_${date.toISOString().split('T')[0]}`,
+                            marginLeft: "-0.75rem",
+                            marginRight: "none",
+                            screenReaderTitle: date.toDateString(),
+                            selectedBackgroundColor: "theme:primary_text_color",
+                            selectedTextColor: "theme:focal_background_color",
+                            size: "normal",
+                            textColor: "theme:primary_text_color",
+                            title: `${currentDay}`
+                        }
+                    ]
+                });
+            }
+            else {
+                // @ts-ignore
+                week.cells.push({
+                    buttons: []
+                });
+            }
+            currentDay++;
+        }
+        rows.push(week);
+    }
+    rows.unshift({
+        cells: [
+            { screenReaderTitle: "Sunday", title: "Sun" },
+            { title: "Mon" },
+            { title: "Tue" },
+            { title: "Wed" },
+            { title: "Thu" },
+            { title: "Fri" },
+            { title: "Sat" }
+        ]
+    });
+    return rows;
+};
+// Main route handler
+app.get('/sapmaccv', (req, res) => {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    console.log(currentMonth, "dslvjkvsdnj");
+    const currentYear = today.getFullYear();
+    const calendarRows = generateDynamicCalendarRows(currentMonth, currentYear);
+    const xmljson = {
+        metadata: {
+            version: "2.0",
+            pageTitle: "Register a Guest"
+        },
+        contentStyle: "inherit",
+        sections: [
+            {
+                elementType: "responsiveColumn",
+                column: {
+                    content: [
+                        {
+                            elementType: "tabs",
+                            tabs: [
                                 {
-                                    "title": "New Visit",
-                                    "content": [
+                                    title: "New Visit",
+                                    content: [
                                         {
-                                            "elementType": "form",
-                                            "buttonsFixedPosition": true,
-                                            "buttonsFixedPositionBackgroundColor": "theme:focal_background_color",
-                                            "buttonsFixedPositionShadow": "none",
-                                            "heading": {
-                                                "elementType": "blockHeading",
-                                                "description": "Select the date for your upcoming guest visit.",
-                                                "descriptionLineHeight": "2em",
-                                                "descriptionTextColor": "theme:secondary_text_color",
-                                                "heading": "Register a guest",
-                                                "headingFontSize": "1.375rem",
-                                                "headingFontWeight": "normal",
-                                                "headingLevel": 2,
-                                                "marginBottom": "medium",
-                                                "marginTop": "none",
-                                                "responsiveScaling": true
+                                            elementType: "form",
+                                            heading: {
+                                                heading: "Register a guest",
+                                                description: "Select the date for your upcoming guest visit."
                                             },
-                                            "showFailureMessages": false,
                                             "items": [
                                                 {
                                                     "elementType": "container",
@@ -459,6 +430,7 @@ app.get('/', (req, res) => {
                                                     "shadow": "medium",
                                                     "shadowOpacity": "0.15",
                                                     "wrapperStyle": "focal",
+                                                    "id": "sampletest",
                                                     "content": [
                                                         {
                                                             "elementType": "sideBySide",
@@ -485,24 +457,43 @@ app.get('/', (req, res) => {
                                                                         "buttons": [
                                                                             {
                                                                                 "elementType": "linkButton",
-                                                                                "disabled": true,
+                                                                                "disabled": false,
                                                                                 "fontSize": "0.75rem",
                                                                                 "icon": "previous",
                                                                                 "iconPosition": "iconOnly",
-                                                                                "title": "Previous month"
+                                                                                "title": "Previous month",
+                                                                                "events": [
+                                                                                    {
+                                                                                        "eventName": "click",
+                                                                                        "action": "ajaxUpdate",
+                                                                                        "targetId": "sampletest",
+                                                                                        "region": "content",
+                                                                                        "ajaxRelativePath": `/ajaxUpdateRegion/calendar?direction=previous&month=${currentMonth}&year=${currentYear}`,
+                                                                                        "loadingIndicator": true
+                                                                                    }
+                                                                                ]
                                                                             },
                                                                             {
                                                                                 "elementType": "linkButton",
                                                                                 "fontSize": "0.75rem",
                                                                                 "textColor": "theme:primary_text_color",
-                                                                                "title": "DEC 2024"
+                                                                                "title": `${new Date(currentYear, currentMonth).toLocaleString("default", { month: "long", year: "numeric" })}`
                                                                             },
                                                                             {
                                                                                 "elementType": "linkButton",
                                                                                 "fontSize": "0.75rem",
                                                                                 "icon": "next",
                                                                                 "iconPosition": "iconOnly",
-                                                                                "title": "Next month"
+                                                                                "title": "Next month",
+                                                                                "events": [
+                                                                                    {
+                                                                                        "eventName": "click",
+                                                                                        "action": "ajaxUpdate",
+                                                                                        "targetId": "calendar_table",
+                                                                                        "ajaxRelativePath": `/ajaxUpdateRegion/calendar?direction=next&month=${currentMonth}&year=${currentYear}`,
+                                                                                        "loadingIndicator": true
+                                                                                    }
+                                                                                ]
                                                                             }
                                                                         ]
                                                                     }
@@ -515,7 +506,7 @@ app.get('/', (req, res) => {
                                                             "marginTop": "tight"
                                                         },
                                                         {
-                                                            "elementType": "table",
+                                                            elementType: "table",
                                                             "colHeaderFontSize": "xsmall",
                                                             "colHeaderFontWeight": "normal",
                                                             "colHeaderPaddingBottom": "xxtight",
@@ -553,2178 +544,9 @@ app.get('/', (req, res) => {
                                                             "paddingRight": "none",
                                                             "paddingTop": "1px",
                                                             "rowBorderStyle": "none",
-                                                            "rows": [
-                                                                {
-                                                                    "cells": [
-                                                                        {
-                                                                            "screenReaderTitle": "Sunday",
-                                                                            "title": "Sun"
-                                                                        },
-                                                                        {
-                                                                            "title": "Mon"
-                                                                        },
-                                                                        {
-                                                                            "title": "Tue"
-                                                                        },
-                                                                        {
-                                                                            "title": "Wed"
-                                                                        },
-                                                                        {
-                                                                            "title": "Thu"
-                                                                        },
-                                                                        {
-                                                                            "title": "Fri"
-                                                                        },
-                                                                        {
-                                                                            "title": "Sat"
-                                                                        }
-                                                                    ]
-                                                                },
-                                                                {
-                                                                    "cells": [
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-01",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 1",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "1"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-02",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 2",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "2"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-03",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 3",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "3"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-04",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 4",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "4"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-05",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 5",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "5"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-06",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 6",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "6"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-07",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 7",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "7"
-                                                                                }
-                                                                            ]
-                                                                        }
-                                                                    ]
-                                                                },
-                                                                {
-                                                                    "cells": [
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-08",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 8",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "8"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-09",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 9",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "9"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-10",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 10",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "10"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-11",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 11",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "11"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-12",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 12",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "12"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-13",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 13",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "13"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-14",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 14",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "14"
-                                                                                }
-                                                                            ]
-                                                                        }
-                                                                    ]
-                                                                },
-                                                                {
-                                                                    "cells": [
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-15",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 15",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "15"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Today, December 16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-30"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-16",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 16",
-                                                                                    "selected": true,
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "16"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Tuesday, December 17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-30"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-17",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 17",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "17"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Wednesday, December 18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-18",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 18",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "18"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Thursday, December 19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-19",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 19",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "19"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Friday, December 20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-30"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-20",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 20",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "20"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-21",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 21",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "21"
-                                                                                }
-                                                                            ]
-                                                                        }
-                                                                    ]
-                                                                },
-                                                                {
-                                                                    "cells": [
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-22",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 22",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "22"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Monday, December 23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-23",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 23",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "23"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Tuesday, December 24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-24",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 24",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "24"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Wednesday, December 25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-25",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 25",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "25"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Thursday, December 26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-26",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 26",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "26"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Friday, December 27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-27",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 27",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "27"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-28",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 28",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "28"
-                                                                                }
-                                                                            ]
-                                                                        }
-                                                                    ]
-                                                                },
-                                                                {
-                                                                    "cells": [
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2024-12-29",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 29",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "29"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Monday, December 30"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-30"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-30"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-30",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 30",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "30"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Tuesday, December 31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-30"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2024-12-31",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "December 31",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "31"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Wednesday, January 1"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-16"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-30"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2025-01-01",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "January 1",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "1"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Thursday, January 2"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-30"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2025-01-02",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "January 2",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "2"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "events": [
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setText",
-                                                                                            "targetId": "selected_date_text",
-                                                                                            "text": "Friday, January 3"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "setValue",
-                                                                                            "targetId": "date",
-                                                                                            "value": "2025-01-03"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-17"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-18"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-19"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-20"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-23"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-24"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-25"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-26"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-27"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-30"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2024-12-31"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-01"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "unselect",
-                                                                                            "targetId": "button_2025-01-02"
-                                                                                        },
-                                                                                        {
-                                                                                            "eventName": "click",
-                                                                                            "action": "select",
-                                                                                            "targetId": "button_2025-01-03"
-                                                                                        }
-                                                                                    ],
-                                                                                    "id": "button_2025-01-03",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "January 3",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "3"
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        {
-                                                                            "buttons": [
-                                                                                {
-                                                                                    "elementType": "linkButton",
-                                                                                    "actionStyle": "link",
-                                                                                    "borderRadius": "full",
-                                                                                    "disabled": true,
-                                                                                    "id": "button_2025-01-04",
-                                                                                    "marginLeft": "-0.75rem",
-                                                                                    "marginRight": "none",
-                                                                                    "screenReaderTitle": "January 4",
-                                                                                    "selectedBackgroundColor": "theme:primary_text_color",
-                                                                                    "selectedTextColor": "theme:focal_background_color",
-                                                                                    "size": "normal",
-                                                                                    "textColor": "theme:primary_text_color",
-                                                                                    "title": "4"
-                                                                                }
-                                                                            ]
-                                                                        }
-                                                                    ]
-                                                                }
-                                                            ]
-                                                        }
-                                                    ]
-                                                },
-                                                {
-                                                    "elementType": "container",
-                                                    "borderRadius": "medium",
-                                                    "borderStyle": "none",
-                                                    "hidden": false,
-                                                    "marginBottom": "tight",
-                                                    "marginTop": "tight",
-                                                    "padding": "none",
-                                                    "shadow": "medium",
-                                                    "shadowOpacity": "0.15",
-                                                    "wrapperStyle": "focal",
-                                                    "content": [
-                                                        {
-                                                            "elementType": "sideBySide",
-                                                            "responsiveWrap": false,
-                                                            "left": {
-                                                                "paddingBottom": "medium",
-                                                                "paddingLeft": "medium",
-                                                                "paddingRight": "medium",
-                                                                "paddingTop": "medium",
-                                                                "preferredWidth": "50%",
-                                                                "content": [
-                                                                    {
-                                                                        "elementType": "html",
-                                                                        "fontSize": "xsmall",
-                                                                        "fontWeight": "bold",
-                                                                        "html": "START TIME"
-                                                                    }
-                                                                ]
-                                                            },
-                                                            "right": {
-                                                                "paddingBottom": "none",
-                                                                "paddingLeft": "medium",
-                                                                "paddingRight": "medium",
-                                                                "paddingTop": "medium",
-                                                                "preferredWidth": "50%",
-                                                                "content": [
-                                                                    {
-                                                                        "elementType": "formInputTime",
-                                                                        "label": "",
-                                                                        "name": "startTime",
-                                                                        "step": 900,
-                                                                        "value": "08:00"
-                                                                    }
-                                                                ]
-                                                            }
+                                                            rows: calendarRows
                                                         },
-                                                        {
-                                                            "elementType": "divider",
-                                                            "marginBottom": "none",
-                                                            "marginTop": "-0.25rem"
-                                                        },
-                                                        {
-                                                            "elementType": "sideBySide",
-                                                            "responsiveWrap": false,
-                                                            "left": {
-                                                                "paddingBottom": "medium",
-                                                                "paddingLeft": "medium",
-                                                                "paddingRight": "medium",
-                                                                "paddingTop": "medium",
-                                                                "preferredWidth": "50%",
-                                                                "content": [
-                                                                    {
-                                                                        "elementType": "html",
-                                                                        "fontSize": "xsmall",
-                                                                        "fontWeight": "bold",
-                                                                        "html": "END TIME"
-                                                                    }
-                                                                ]
-                                                            },
-                                                            "right": {
-                                                                "paddingBottom": "none",
-                                                                "paddingLeft": "medium",
-                                                                "paddingRight": "medium",
-                                                                "paddingTop": "medium",
-                                                                "preferredWidth": "50%",
-                                                                "content": [
-                                                                    {
-                                                                        "elementType": "formInputTime",
-                                                                        "label": "",
-                                                                        "name": "startTime",
-                                                                        "step": 900,
-                                                                        "value": "09:00"
-                                                                    }
-                                                                ]
-                                                            }
-                                                        }
                                                     ]
-                                                },
-                                                {
-                                                    "elementType": "container",
-                                                    "borderRadius": "medium",
-                                                    "borderStyle": "none",
-                                                    "hidden": false,
-                                                    "marginBottom": "tight",
-                                                    "marginTop": "tight",
-                                                    "padding": "none",
-                                                    "shadow": "medium",
-                                                    "shadowOpacity": "0.15",
-                                                    "wrapperStyle": "focal",
-                                                    "content": [
-                                                        {
-                                                            "elementType": "sideBySide",
-                                                            "responsiveWrap": false,
-                                                            "left": {
-                                                                "paddingBottom": "medium",
-                                                                "paddingLeft": "medium",
-                                                                "paddingRight": "medium",
-                                                                "paddingTop": "medium",
-                                                                "preferredWidth": "50%",
-                                                                "content": [
-                                                                    {
-                                                                        "elementType": "html",
-                                                                        "fontSize": "xsmall",
-                                                                        "fontWeight": "bold",
-                                                                        "html": "LOCATION"
-                                                                    }
-                                                                ]
-                                                            },
-                                                            "right": {
-                                                                "paddingBottom": "none",
-                                                                "paddingLeft": "medium",
-                                                                "paddingRight": "medium",
-                                                                "paddingTop": "medium",
-                                                                "preferredWidth": "50%",
-                                                                "content": [
-                                                                    {
-                                                                        "elementType": "formInputSelect",
-                                                                        "label": "",
-                                                                        "name": "location",
-                                                                        "options": [
-                                                                            {
-                                                                                "label": "270 Park",
-                                                                                "value": "270 Park"
-                                                                            },
-                                                                            {
-                                                                                "label": "245 Park",
-                                                                                "value": "245 Park"
-                                                                            },
-                                                                            {
-                                                                                "label": "277 Park",
-                                                                                "value": "277 Park"
-                                                                            },
-                                                                            {
-                                                                                "label": "383 Madison",
-                                                                                "value": "383 Madison"
-                                                                            }
-                                                                        ],
-                                                                        "value": "270 Park"
-                                                                    }
-                                                                ]
-                                                            }
-                                                        }
-                                                    ]
-                                                },
-                                                {
-                                                    "elementType": "formInputDate",
-                                                    "hidden": true,
-                                                    "id": "date",
-                                                    "name": "date"
-                                                },
-                                                {
-                                                    "elementType": "divider",
-                                                    "borderStyle": "none",
-                                                    "marginTop": "3rem"
                                                 }
                                             ],
                                             "buttons": [
@@ -2745,21 +567,6 @@ app.get('/', (req, res) => {
                                             ]
                                         }
                                     ]
-                                },
-                                {
-                                    "title": "Upcoming",
-                                    "content": [
-                                        {
-                                            "elementType": "blockHeading",
-                                            "heading": "Upcoming guest visits",
-                                            "headingFontSize": "1.375rem",
-                                            "headingFontWeight": "normal",
-                                            "headingLevel": 2,
-                                            "marginTop": "none",
-                                            "responsiveScaling": true
-                                        },
-                                        ...sections,
-                                    ]
                                 }
                             ]
                         }
@@ -2769,6 +576,179 @@ app.get('/', (req, res) => {
         ]
     };
     res.json(xmljson);
+});
+app.get('/ajaxUpdateRegion/calendar', (req, res) => {
+    const { direction, month, year } = req.query;
+    console.log(direction, month);
+    console.log(month, year, "dslsddsdsdvjkvsdnj");
+    // const direction1= req.body
+    // console.log(direction1);
+    // @ts-ignore
+    let newMonth = parseInt(month, 10);
+    // @ts-ignore
+    let newYear = parseInt(year, 10);
+    if (direction === "previous") {
+        newMonth -= 1;
+        if (newMonth < 0) {
+            newMonth = 11;
+            newYear -= 1;
+        }
+    }
+    else if (direction === "next") {
+        newMonth += 1;
+        if (newMonth > 11) {
+            newMonth = 0;
+            newYear += 1;
+        }
+    }
+    const calendarRows = generateDynamicCalendarRows(newMonth, newYear);
+    res.json({
+        metadata: {
+            version: "2.0"
+        },
+        regionContent: [
+            {
+                "elementType": "sideBySide",
+                "responsiveWrap": false,
+                "left": {
+                    "content": [
+                        {
+                            "elementType": "html",
+                            "css": "text-transform: uppercase;",
+                            "fontSize": "0.75rem",
+                            "fontWeight": "bold",
+                            "html": "Today, December 16",
+                            "id": "selected_date_text",
+                            "lineHeight": "xloose"
+                        }
+                    ]
+                },
+                "right": {
+                    "content": [
+                        {
+                            "elementType": "buttonGroup",
+                            "actionStyle": "link",
+                            "size": "small",
+                            "buttons": [
+                                {
+                                    "elementType": "linkButton",
+                                    "disabled": false,
+                                    "fontSize": "0.75rem",
+                                    "icon": "previous",
+                                    "iconPosition": "iconOnly",
+                                    "title": "Previous month",
+                                    "events": [
+                                        {
+                                            "eventName": "click",
+                                            "action": "ajaxUpdate",
+                                            "targetId": "sampletest",
+                                            "region": "content",
+                                            "ajaxRelativePath": `/ajaxUpdateRegion/calendar?direction=previous&month=${newMonth}&year=${newYear}`,
+                                            "loadingIndicator": true
+                                        }
+                                    ]
+                                },
+                                {
+                                    "elementType": "linkButton",
+                                    "fontSize": "0.75rem",
+                                    "textColor": "theme:primary_text_color",
+                                    "title": `${new Date(newYear, newMonth).toLocaleString("default", { month: "long", year: "numeric" })}`
+                                },
+                                {
+                                    "elementType": "linkButton",
+                                    "fontSize": "0.75rem",
+                                    "icon": "next",
+                                    "iconPosition": "iconOnly",
+                                    "title": "Next month",
+                                    "events": [
+                                        {
+                                            "eventName": "click",
+                                            "action": "ajaxUpdate",
+                                            "targetId": "calendar_table",
+                                            "ajaxRelativePath": `/ajaxUpdateRegion/calendar?direction=next&month=${newMonth}&year=${newYear}`,
+                                            "loadingIndicator": true
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+            {
+                "elementType": "divider",
+                "marginBottom": "tight",
+                "marginTop": "tight"
+            },
+            {
+                elementType: "table",
+                "colHeaderFontSize": "xsmall",
+                "colHeaderFontWeight": "normal",
+                "colHeaderPaddingBottom": "xxtight",
+                "colHeaderTextColor": "theme:tertiary_text_color",
+                "columnBorderStyle": "none",
+                "columnHeaders": true,
+                "columnOptions": [
+                    {
+                        "width": "14.2%"
+                    },
+                    {
+                        "width": "14.2%"
+                    },
+                    {
+                        "width": "14.2%"
+                    },
+                    {
+                        "width": "14.2%"
+                    },
+                    {
+                        "width": "14.2%"
+                    },
+                    {
+                        "width": "14.2%"
+                    },
+                    {
+                        "width": "14.2%"
+                    }
+                ],
+                "horizontalAlignment": "center",
+                "id": "calendar_table",
+                "outerBorderStyle": "none",
+                "paddingBottom": "1px",
+                "paddingLeft": "none",
+                "paddingRight": "none",
+                "paddingTop": "1px",
+                "rowBorderStyle": "none",
+                rows: calendarRows
+            },
+        ]
+    });
+});
+app.get('/calendar', (req, res) => {
+    const { direction, month, year } = req.body;
+    let newMonth = parseInt(month);
+    let newYear = parseInt(year);
+    if (direction === 'previous') {
+        newMonth -= 1;
+        if (newMonth < 0) {
+            newMonth = 11;
+            newYear -= 1;
+        }
+    }
+    else if (direction === 'next') {
+        newMonth += 1;
+        if (newMonth > 11) {
+            newMonth = 0;
+            newYear += 1;
+        }
+    }
+    const calendarRows = generateDynamicCalendarRows(newMonth, newYear);
+    res.json({
+        rows: calendarRows,
+        currentMonth: newMonth,
+        currentYear: newYear,
+        monthTitle: `${new Date(newYear, newMonth).toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase()}`
+    });
 });
 // app.get('/', (req: Request, res: Response) => {
 //     // let sample = req.query.name
@@ -2842,26 +822,18 @@ app.post('/postdata', (req, res) => {
     res.json(xmlJSON);
 });
 app.get('/dispatch', (req, res) => {
-    console.log(req.query.item);
-    // const 
-    let xmljson = {
-        "metadata": {
-            "version": "2.0"
-        },
-        regionContent: []
-    };
-    switch (req.query.item) {
-        case "email":
-            xmljson.regionContent.push({
-                "elementType": "formInputEmail",
-                "name": "s1_email",
-                "label": "Email address",
-                "required": true
-            });
-            break;
-    }
-    res.json(xmljson);
+    res.json({ message: 'Hello from AWS Lambda!' });
 });
+// Create Lambda handler
+const server = aws_serverless_express_1.default.createServer(app);
+const handler = (event, context) => aws_serverless_express_1.default.proxy(server, event, context);
+exports.handler = handler;
+// Optional: Only run this locally
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
+}
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });

@@ -1,5 +1,8 @@
 import express, { Request, Response } from 'express';
 
+import { APIGatewayProxyEvent, Context } from 'aws-lambda';
+import serverlessExpress from 'aws-serverless-express';
+
 const app = express();
 const PORT = 8080;
 
@@ -925,30 +928,21 @@ interface xmljson {
 
 app.get('/dispatch', (req: Request, res: Response) => {
 
-    console.log(req.query.item)
-    // const 
-    let xmljson: xmljson = {
-        "metadata": {
-            "version": "2.0"
-        },
-        regionContent: []
-
-    }
-
-    switch (req.query.item) {
-        case "email":
-            xmljson.regionContent.push({
-                "elementType": "formInputEmail",
-                "name": "s1_email",
-                "label": "Email address",
-                "required": true
-            })
-            break;
-    }
-    res.json(xmljson);
+    res.json({ message: 'Hello from AWS Lambda!' });
 });
 
+// Create Lambda handler
+const server = serverlessExpress.createServer(app);
 
+export const handler = (event: APIGatewayProxyEvent, context: Context) =>
+    serverlessExpress.proxy(server, event, context);
+
+// Optional: Only run this locally
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
+}
 
 
 app.listen(PORT, () => {
